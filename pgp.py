@@ -8,14 +8,29 @@ Requires GnuPG to be installed on the system. On macOS, you can install it using
 import subprocess
 import sys
 
-# Constants
-# Replace with your own email to use as a default
-EMAIL = None
-# EXAMPLE:
-# EMAIL = "my_email@my_domain.com"
+# Configuration
+# Optionally, replace with your own email and recipient's email
+# to avoid entering them every time.
+FROM_EMAIL = None
+TO_EMAIL = None
+# Example:
+# FROM_EMAIL = "sender@domain.com"
+# TO_EMAIL = "recipient@domain.com"
 
-# Set up private and public PGP keys
+# Get email
+def get_sender_email():
+    if FROM_EMAIL:
+        return FROM_EMAIL
+    email = input("Enter your email address for the PGP key:\n")
+    return email
 
+def get_recipient_email():
+    if TO_EMAIL:
+        return TO_EMAIL
+    email = input("Enter the recipient's email address:\n")
+    return email
+
+# Print public key(s)
 def print_pgp_public_keys(email):
     # Command to export the public key
     export_cmd = ['gpg', '--armor', '--export', email]
@@ -30,11 +45,8 @@ def print_pgp_public_keys(email):
     else:
         print(f"Error exporting PGP public key: {export_result.stderr.decode()}")
 
-import subprocess
-
-def setup_pgp_keys():
-    email = input("Enter your email address for the PGP key: ")
-
+# Set up private and public PGP keys
+def setup_pgp_keys(email):
     # Command to generate the PGP key
     cmd = [
         'gpg', '--batch', '--gen-key', '--yes'
@@ -74,9 +86,7 @@ def setup_pgp_keys():
         print(f"An error occurred: {str(e)}")
 
 # Define encryption function
-def encrypt_message():
-    recipient = input("Enter the recipient's email address: ")
-
+def encrypt_message(recipient):
     print("Enter the message you want to encrypt (paste the message, then press Ctrl+D to finish):")
 
     # Read multiline input for the message to be encrypted
@@ -132,26 +142,20 @@ def decrypt_message():
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-# Get email
-def get_email():
-    if EMAIL:
-        return EMAIL
-    email = input("Enter your email address for the PGP key:\n")
-    return email
-
 # Main block to handle command-line interaction
 if __name__ == '__main__':
     mode = input("Choose s=setup, v=view, e=encrypt, d=decrypt, or q=quit: ").strip().lower()
     mode = mode[0] if mode else ""
 
     if mode == 's':
-        email = get_email()
+        email = get_sender_email()
         setup_pgp_keys(email)
     elif mode == 'v':
-        email = get_email()
+        email = get_sender_email()
         print_pgp_public_keys(email)
     elif mode == 'e':
-        encrypt_message()
+        recipient = get_recipient_email()
+        encrypt_message(recipient)
     elif mode == 'd':
         decrypt_message()
     elif mode == 'q':
