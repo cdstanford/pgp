@@ -10,6 +10,14 @@ TODO: still debugging this script.
 import subprocess
 import sys
 
+# Check if GnuPG is installed
+try:
+    subprocess.run(['gpg', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+except FileNotFoundError:
+    print("GnuPG is not installed. Please install GnuPG before running this script.")
+    print("On macOS, you can install it using Homebrew: `brew install gnupg`")
+    exit(1)
+
 # Configuration
 
 # Use RSA 4096-bit keys that expire in 2 years
