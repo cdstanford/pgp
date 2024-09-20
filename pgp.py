@@ -36,6 +36,9 @@ EMAIL = None
 # Example:
 # EMAIL = "sender@domain.com"
 
+# File for the public key
+PUB_KEY_FILE = "public_key.asc"
+
 ###############################
 ###     Setup Functions     ###
 ###############################
@@ -59,6 +62,12 @@ def print_pgp_public_keys(email):
         public_key = export_result.stdout.decode()
         print("\nPublic PGP Key (to post on your website):\n")
         print(public_key)
+
+        print("Saving public key to a file for convenient sharing...")
+        with open(PUB_KEY_FILE, "w") as f:
+            f.write(public_key)
+        print(f"Public key saved successfully to {PUB_KEY_FILE}.")
+
     else:
         print(f"Error exporting PGP public key: {export_result.stderr.decode()}")
 
