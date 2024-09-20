@@ -33,8 +33,7 @@ PASS_PHRASE_FILE = "pass_phrase.txt"
 ###     Setup     ###
 #####################
 
-# Get user name and email
-# -- or setup if not configured
+# Get or setup user name and email
 def get_user_name_and_email():
     # Step 1: List the secret keys to ensure we only get the local user's key(s)
     result = subprocess.run(['gpg', '--list-secret-keys'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -58,22 +57,13 @@ def get_user_name_and_email():
         # If any identities (name, email) were found, return the first one (or list of them)
         if identities:
             # Default to the first name-email pair, could return list if needed
-            print(f"Found existing identity, using: {identities[0][0]} <{identities[0][1]}>")
             return identities[0]
 
     else:
         print(f"Warning: error listing GPG secret keys: {result.stderr.decode()}")
 
-    # Step 2: If no name or email was found, prompt the user to set a new one
-    print("Looks like this is your first time running the tool. Let's set up your GPG key.")
-    name = input("Please enter your real name:\n")
-    print("Please enter your email address to configure your first GPG key:")
-    email = input("(Note: this is public, but it won't be used to send you emails)\n")
-
-    # Set up the GPG configuration with the new name and email
-    setup_pgp_keys(name, email)
-
-    return (name, email)
+    # No name or email was found
+    return None, None
 
 # Get the pass phrase if it's loaded from a file.
 def get_user_pass_phrase():
@@ -116,7 +106,19 @@ def set_user_pass_phrase():
         return None
 
 # Set up private and public PGP keys
-def setup_pgp_keys(name, email):
+def setup_pgp_keys():
+
+    name, email = get_user_name_and_email()
+
+    if name and email:
+        print(f"Found existing identity, using: {name} <{email}>")
+        print_pgp_public_keys(email)
+        return
+
+    print("Looks like this is your first time running the tool. Let's set up your GPG key.")
+    name = input("Please enter your real name:\n")
+    print("Please enter your email address to configure your first GPG key:")
+    email = input("(Note: this is public, but it won't be used to send you emails)\n")
 
     # Command to generate the PGP key
     cmd = [
@@ -137,7 +139,7 @@ def setup_pgp_keys(name, email):
         Name-Real: {name}
         Name-Email: {email}
         Expire-Date: {KEY_EXPIRE}
-        Passphrase: {PASS_PHRASE}
+        Passphrase: {pass_phrase}
         %commit
         """
     else:
@@ -174,6 +176,7 @@ def setup_pgp_keys(name, email):
 
 # Print public key(s)
 def print_pgp_public_keys(email):
+
     # Command to export the public key
     export_cmd = ['gpg', '--armor', '--export', email]
     export_result = subprocess.run(
@@ -205,8 +208,14 @@ def reset_all_keys():
         print("Aborting operation.")
         return
 
+    # Get user name
+    name, _ = get_user_name_and_email()
+    if not name:
+        print("No user name found. Aborting operation.")
+        return
+
     # Command to delete all keys
-    cmd = ['gpg', '--delete-secret-and-public-keys', '--yes', REAL_NAME]
+    cmd = ['gpg', '--delete-secret-and-public-keys', '--yes', name]
 
     try:
         # Step 1: Delete all secret (private) keys
@@ -359,13 +368,17 @@ def decrypt_message():
         print("Error: The encrypted message format is incorrect.")
         return
 
+    # Get user name and email
+    # This just ensures they are set up.
+    _name, _email = get_user_name_and_email()
+
     # Get pass phrase
     pass_phrase = get_user_pass_phrase()
 
     if pass_phrase:
-        command = ['gpg', '--pinentry-mode', 'loopback', '--passphrase', f"{PASS_PHRASE}", '--decrypt']
+        command = ['gpg', '--pinentry-mode', 'loopback', '--passphrase', f"{pass_phrase}", '--decrypt']
     else:
-        command = ['gpg', '--decrypt']
+        command = ['gpg', '--pinentry-mode', 'loopback', '--decrypt']
 
     try:
         # Run the gpg command to decrypt the message
