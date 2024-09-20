@@ -3,12 +3,24 @@ Quick script to use GnuPG to manage PGP keys and encrypt/decrypt messages.
 
 Requires GnuPG to be installed on the system. On macOS, you can install it using Homebrew:
 - `brew install gnupg`
+
+TODO: still debugging this script.
 """
 
 import subprocess
 import sys
 
 # Configuration
+
+# Use RSA 4096-bit keys that expire in 2 years
+KEY_TYPE = "RSA"
+KEY_LENGTH = 4096
+KEY_EXPIRE = "2y"
+
+# For greater security, replace with your real name and a real pass phrase
+REAL_NAME = "User"
+PASS_PHRASE = "passphrase"
+
 # Optionally, replace with your own email and recipient's email
 # to avoid entering them every time.
 FROM_EMAIL = None
@@ -54,14 +66,14 @@ def setup_pgp_keys(email):
 
     # GPG parameters for key generation
     key_params = f"""
-    Key-Type: RSA
-    Key-Length: 2048
-    Subkey-Type: RSA
-    Subkey-Length: 2048
-    Name-Real: User
+    Key-Type: {KEY_TYPE}
+    Key-Length: {KEY_LENGTH}
+    Subkey-Type: {KEY_TYPE}
+    Subkey-Length: {KEY_LENGTH}
+    Name-Real: {REAL_NAME}
     Name-Email: {email}
-    Expire-Date: 2y
-    %no-protection
+    Expire-Date: {KEY_EXPIRE}
+    Passphrase: {PASS_PHRASE}
     %commit
     """
 
@@ -81,6 +93,29 @@ def setup_pgp_keys(email):
 
         else:
             print(f"Error generating PGP key pair: {result.stderr.decode()}")
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+def register_recipient():
+    print("Enter the recipient's public key (paste the entire key, then press Ctrl+D to finish):")
+
+    # Read multiline input for the recipient's public key
+    public_key = sys.stdin.read()
+
+    try:
+        # Import the public key into the GPG keyring
+        result = subprocess.run(
+            ['gpg', '--import'],
+            input=public_key.encode(),  # Provide the public key as input
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        if result.returncode == 0:
+            print("Recipient's public key has been successfully imported.")
+        else:
+            print(f"Error importing public key: {result.stderr.decode()}")
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")
@@ -144,7 +179,7 @@ def decrypt_message():
 
 # Main block to handle command-line interaction
 if __name__ == '__main__':
-    mode = input("Choose s=setup, v=view, e=encrypt, d=decrypt, or q=quit: ").strip().lower()
+    mode = input("Choose s=setup, v=view public key, r=register recipient, e=encrypt, d=decrypt, or q=quit: ").strip().lower()
     mode = mode[0] if mode else ""
 
     if mode == 's':
@@ -153,6 +188,8 @@ if __name__ == '__main__':
     elif mode == 'v':
         email = get_sender_email()
         print_pgp_public_keys(email)
+    elif mode == 'r':
+        register_recipient()
     elif mode == 'e':
         recipient = get_recipient_email()
         encrypt_message(recipient)
