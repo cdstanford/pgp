@@ -18,36 +18,33 @@ except FileNotFoundError:
     print("On macOS, you can install it using Homebrew: `brew install gnupg`")
     exit(1)
 
-# Configuration
+#############################
+###     Configuration     ###
+#############################
 
-# Use RSA 4096-bit keys that expire in 2 years
+# Uses RSA 4096-bit keys that expire in 2 years.
 KEY_TYPE = "RSA"
 KEY_LENGTH = 4096
 KEY_EXPIRE = "2y"
 
-# For greater security, replace with your real name and a real pass phrase
+# For greater security, replace with your real name and a real pass phrase.
 REAL_NAME = "User"
 PASS_PHRASE = "passphrase"
 
-# Optionally, replace with your own email and recipient's email
-# to avoid entering them every time.
-FROM_EMAIL = None
-TO_EMAIL = None
+# Optionally, replace with your own email to avoid entering it every time.
+EMAIL = None
 # Example:
-# FROM_EMAIL = "sender@domain.com"
-# TO_EMAIL = "recipient@domain.com"
+# EMAIL = "sender@domain.com"
+
+###############################
+###     Setup Functions     ###
+###############################
 
 # Get email
-def get_sender_email():
-    if FROM_EMAIL:
-        return FROM_EMAIL
-    email = input("Enter your email address for the PGP key:\n")
-    return email
-
-def get_recipient_email():
-    if TO_EMAIL:
-        return TO_EMAIL
-    email = input("Enter the recipient's email address:\n")
+def get_user_email():
+    if EMAIL:
+        return EMAIL
+    email = input("Enter your email address:\n")
     return email
 
 # Print public key(s)
@@ -128,8 +125,67 @@ def register_recipient():
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-# Define encryption function
-def encrypt_message(recipient):
+##########################
+###     Encryption     ###
+##########################
+
+def list_recipients():
+    # List public keys available in the keyring
+    result = subprocess.run(['gpg', '--list-keys'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    if result.returncode != 0:
+        print("Error listing public keys:", result.stderr.decode())
+        return []
+
+    # Decode the output and extract email addresses
+    output = result.stdout.decode()
+    keys = []
+    for line in output.splitlines():
+        if "uid" in line:
+            # Extract email from the uid line (between < and >)
+            start = line.find("<")
+            end = line.find(">")
+            if start != -1 and end != -1:
+                email = line[start+1:end]
+                keys.append(email)
+
+    return sorted(set(keys))
+
+def select_recipient():
+    recipients = list_recipients()
+
+    if not recipients:
+        print("No recipients found in the keyring.")
+        print("Help: to add a recipient, use the 'r' option.")
+        return None
+    elif len(recipients) == 1:
+        print(f"Only one recipient found, using it.")
+        print("Help: to add a recipient, use the 'r' option.")
+        return recipients[0]
+
+    # Display the recipient list
+    print("Select a recipient:")
+    for i, recipient in enumerate(recipients, start=1):
+        print(f"{i}: {recipient}")
+
+    try:
+        selection = int(input("Enter the recipient number: "))
+        if 1 <= selection <= len(recipients):
+            return recipients[selection - 1]
+        else:
+            print("Invalid selection.")
+            return None
+    except ValueError:
+        print("Invalid input. Please enter a number.")
+        return None
+
+def encrypt_message():
+    recipient = select_recipient()
+
+    if recipient is None:
+        return
+
+    print(f"Selected recipient: {recipient}")
     print("Enter the message you want to encrypt (paste the message, then press Ctrl+D to finish):")
 
     # Read multiline input for the message to be encrypted
@@ -154,6 +210,10 @@ def encrypt_message(recipient):
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
+##########################
+###     Decryption     ###
+##########################
+
 # Define decryption function
 def decrypt_message():
     print("Enter the encrypted message (paste the entire message, then press Ctrl+D to finish):")
@@ -161,15 +221,15 @@ def decrypt_message():
     # Read multiline input
     encrypted_message = sys.stdin.read()
 
-    try:
-        # Ensure the message starts and ends correctly
-        if "-----BEGIN PGP MESSAGE-----" not in encrypted_message or "-----END PGP MESSAGE-----" not in encrypted_message:
-            print("Error: The encrypted message format is incorrect.")
-            return
+    # Ensure the message starts and ends correctly
+    if "-----BEGIN PGP MESSAGE-----" not in encrypted_message or "-----END PGP MESSAGE-----" not in encrypted_message:
+        print("Error: The encrypted message format is incorrect.")
+        return
 
+    try:
         # Run the gpg command to decrypt the message
         result = subprocess.run(
-            ['gpg', '--decrypt'],
+            ['gpg', '--pinentry-mode', 'loopback', '--passphrase', f"{PASS_PHRASE}", '--decrypt'],
             input=encrypted_message.encode(),  # Provide the encrypted message as input
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
@@ -185,22 +245,25 @@ def decrypt_message():
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
+##################################
+###     Entrypoint and CLI     ###
+##################################
+
 # Main block to handle command-line interaction
 if __name__ == '__main__':
     mode = input("Choose s=setup, v=view public key, r=register recipient, e=encrypt, d=decrypt, or q=quit: ").strip().lower()
     mode = mode[0] if mode else ""
 
     if mode == 's':
-        email = get_sender_email()
+        email = get_user_email()
         setup_pgp_keys(email)
     elif mode == 'v':
-        email = get_sender_email()
+        email = get_user_email()
         print_pgp_public_keys(email)
     elif mode == 'r':
         register_recipient()
     elif mode == 'e':
-        recipient = get_recipient_email()
-        encrypt_message(recipient)
+        encrypt_message()
     elif mode == 'd':
         decrypt_message()
     elif mode == 'q':
