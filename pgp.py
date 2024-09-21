@@ -3,6 +3,8 @@ Quick script to use GnuPG to manage PGP keys and encrypt/decrypt messages.
 
 Requires GnuPG to be installed on the system. On macOS, you can install it using Homebrew:
 - `brew install gnupg`
+
+Note: Still debugging several issues. This script is a work in progress.
 """
 
 import subprocess
