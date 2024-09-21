@@ -8,12 +8,32 @@ Requires GnuPG to be installed on the system. On macOS, you can install it using
 import subprocess
 import sys
 
+#################################
+###     Dependency checks     ###
+#################################
+
+failed = False
+
 # Check if GnuPG is installed
 try:
+    # Check if xcdoe-select is installed
+    subprocess.run(['xcode-select', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+except FileNotFoundError:
+    print("Xcode Command Line Tools are not installed. Please install Xcode Command Line Tools before running this script.")
+    print("On macOS, you can install it using `xcode-select --install`")
+    failed = True
+
+try:
+    # Check if GnuPG is installed
     subprocess.run(['gpg', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
 except FileNotFoundError:
     print("GnuPG is not installed. Please install GnuPG before running this script.")
     print("On macOS, you can install it using Homebrew: `brew install gnupg`")
+    failed = True
+
+if failed:
     exit(1)
 
 #############################
@@ -33,7 +53,7 @@ PASS_PHRASE_FILE = "pass_phrase.txt"
 ###     Setup     ###
 #####################
 
-# Get or setup user name and email
+# Get existing user name and email
 def get_user_name_and_email():
     # Step 1: List the secret keys to ensure we only get the local user's key(s)
     result = subprocess.run(['gpg', '--list-secret-keys'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -62,72 +82,24 @@ def get_user_name_and_email():
     else:
         print(f"Warning: error listing GPG secret keys: {result.stderr.decode()}")
 
-    # No name or email was found
-    return None, None
+    # Step 2: If no name/email was found, prompt the user to set them up
+    return first_time_setup()
 
-# Get the pass phrase if it's loaded from a file.
-def get_user_pass_phrase():
-
-    # Check if the pass phrase is already saved in a file
-    try:
-        with open(PASS_PHRASE_FILE, "r") as f:
-            pass_phrase = f.read().strip()
-            print("Pass phrase loaded from file.")
-            if pass_phrase:
-                return pass_phrase
-    except FileNotFoundError:
-        print("Note: no pass phrase file found; pass phrase will be entered manually.")
-        return None
-
-# Optionally configure the pass phrase as plain text in PASS_PHRASE_FILE.
-# Warning: this is not secure, but it is safe as long as no one has read access to your filesystem.
-# If you want maximum security, enter the pass phrase manually each time.
-def set_user_pass_phrase():
-    print("Do you want to save a pass phrase as plain text?")
-    print("This is less secure, but it can be convenient for testing.")
-    save_pass = input("Enter 'y' to save the pass phrase, or any other key to enter it manually: ")
-
-    if save_pass.lower() != 'y':
-        print("Got it. To change this setting later, use the `s` option to re-run setup.")
-        return None
-
-    print(f"Saving pass phrase to {PASS_PHRASE_FILE}...")
-    pass_phrase = input("Enter your pass phrase (appears in plain text):\n")
-    try:
-        with open("pass_phrase.txt", "w") as f:
-            f.write(pass_phrase)
-        print("Pass phrase saved successfully.")
-        print("Make sure you keep this file safe!")
-        print("To change the pass phrase, delete the pass_phrase.txt file.")
-        return pass_phrase
-
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return None
-
-# Set up private and public PGP keys
-def setup_pgp_keys():
-
-    name, email = get_user_name_and_email()
-
-    if name and email:
-        print(f"Found existing identity, using: {name} <{email}>")
-        print_pgp_public_keys(email)
-        return
-
+# First time setup (if no user name and email are found)
+# Sets up private and public PGP keys + password (if wanted)
+def first_time_setup():
     print("Looks like this is your first time running the tool. Let's set up your GPG key.")
     name = input("Please enter your real name:\n")
     print("Please enter your email address to configure your first GPG key:")
     email = input("(Note: this is public, but it won't be used to send you emails)\n")
 
+    # Get or set the pass phrase
+    pass_phrase = get_or_set_user_pass_phrase()
+
     # Command to generate the PGP key
     cmd = [
         'gpg', '--batch', '--gen-key', '--yes'
     ]
-
-    pass_phrase = get_user_pass_phrase()
-    if not pass_phrase:
-        pass_phrase = set_user_pass_phrase()
 
     # GPG parameters for key generation
     if pass_phrase:
@@ -174,6 +146,72 @@ def setup_pgp_keys():
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
+
+    return name, email
+
+# Get the pass phrase if it's loaded from a file.
+def get_user_pass_phrase():
+
+    # Check if the pass phrase is already saved in a file
+    try:
+        with open(PASS_PHRASE_FILE, "r") as f:
+            pass_phrase = f.read().strip()
+            # Pass phrased loaded from file
+            if pass_phrase:
+                return pass_phrase
+            else:
+                return None
+
+    except FileNotFoundError:
+        # No pass phrase file found; pass phrase will be entered manually
+        return None
+
+# Like get, but optionally configure the pass phrase as plain text in PASS_PHRASE_FILE.
+# Warning: this is not secure, but it is safe as long as no one has read access to your filesystem.
+# If you want maximum security, enter the pass phrase manually each time.
+def get_or_set_user_pass_phrase():
+    pass_phrase = get_user_pass_phrase()
+    if pass_phrase:
+        return pass_phrase
+
+    print("Do you want to save a pass phrase as plain text?")
+    print("This is less secure, but it can be convenient for testing.")
+    save_pass = input("Enter 'y' to save the pass phrase, or any other key to enter it manually:\n")
+
+    if save_pass.lower() != 'y':
+        print("Got it. To change this setting later, use the `s` option to re-run setup.")
+        return None
+
+    print(f"Saving pass phrase to {PASS_PHRASE_FILE}...")
+    pass_phrase = input("Enter your pass phrase (appears in plain text):\n")
+
+    if not pass_phrase:
+        print("Pass phrase cannot be empty.")
+        return None
+
+    try:
+        with open("pass_phrase.txt", "w") as f:
+            f.write(pass_phrase)
+        print("Pass phrase saved successfully.")
+        print("Make sure you keep this file safe!")
+        print("To change the pass phrase, delete the pass_phrase.txt file.")
+        return pass_phrase
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return None
+
+# Set up PGP keys
+# Also can be used to configure the user, name, or password
+def setup_pgp_keys():
+    print("Running setup.")
+    # Step 1: call get_user_name_and_email, which will call first_time_setup if needed.
+    _user, _email = get_user_name_and_email()
+    # Step 2: TODO
+    # A limitation is that if password was NOT saved to a file, we should really re-ask here.
+    # For now, we just re-ask twice in some cases.
+    _pass = get_or_set_user_pass_phrase()
+
 # Print public key(s)
 def print_pgp_public_keys(email):
 
@@ -202,7 +240,7 @@ def reset_all_keys():
     print("Warning: this will permanently delete all GPG keys from your keyring.")
     print("Existing encryption keys or encrypted messages will be lost.")
     print("This operation cannot be undone.")
-    confirm = input("Are you sure you want to continue? (y/n): ")
+    confirm = input("Are you sure you want to continue? (y/n):\n")
 
     if confirm.lower() != 'y':
         print("Aborting operation.")
@@ -297,13 +335,15 @@ def select_recipient():
     if not recipients:
         print("No recipients found in the keyring; let's add one.")
         register_recipient()
+        # Call the function again to re-list the recipients
+        return select_recipient()
 
     # Display the recipient list
     print("Select a recipient, or 'r' to register a new recipient:")
     for i, recipient in enumerate(recipients, start=1):
         print(f"{i}: {recipient}")
 
-    raw_selection = input("Enter the recipient number: ").strip().lower()
+    raw_selection = input("Enter the recipient number:\n").strip().lower()
 
     if raw_selection == 'r':
         register_recipient()
@@ -368,11 +408,10 @@ def decrypt_message():
         print("Error: The encrypted message format is incorrect.")
         return
 
-    # Get user name and email
-    # This just ensures they are set up.
+    # Ensure PGP is set up by getting the user's name and email.
     _name, _email = get_user_name_and_email()
 
-    # Get pass phrase
+    # Get pass phrase if present (does not prompt if pass phrase is saved in a file)
     pass_phrase = get_user_pass_phrase()
 
     if pass_phrase:
