@@ -57,7 +57,7 @@ PASS_PHRASE_FILE = "pass_phrase.txt"
 
 # Get existing user name and email
 def get_user_name_and_email():
-    # Step 1: List the secret keys to ensure we only get the local user's key(s)
+    # List the secret keys to ensure we only get the local user's key(s)
     result = subprocess.run(['gpg', '--list-secret-keys'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     # Check if the command ran successfully and if any keys were listed
@@ -84,7 +84,19 @@ def get_user_name_and_email():
     else:
         print(f"Warning: error listing GPG secret keys: {result.stderr.decode()}")
 
-    # Step 2: If no name/email was found, prompt the user to set them up
+    return None, None
+
+# Get user name and email, setting it if not found
+# Similar to set_pgp_keys, but does not set the pass phrase
+# unless the name/email are not present already.
+def ensure_user_name_and_email():
+    # Step 1: try to retrieve from the keychain
+    name, email = get_user_name_and_email()
+
+    if name and email:
+        return name, email
+
+    # Step 2: if not found, run the first time setup
     return first_time_setup()
 
 # First time setup (if no user name and email are found)
@@ -96,7 +108,7 @@ def first_time_setup():
     email = input("(Note: this is public, but it won't be used to send you emails)\n")
 
     # Get or set the pass phrase
-    pass_phrase = get_or_set_user_pass_phrase()
+    pass_phrase = ensure_user_pass_phrase()
 
     # Command to generate the PGP key
     cmd = [
@@ -148,7 +160,6 @@ def first_time_setup():
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-
     return name, email
 
 # Get the pass phrase if it's loaded from a file.
@@ -171,7 +182,7 @@ def get_user_pass_phrase():
 # Like get, but optionally configure the pass phrase as plain text in PASS_PHRASE_FILE.
 # Warning: this is not secure, but it is safe as long as no one has read access to your filesystem.
 # If you want maximum security, enter the pass phrase manually each time.
-def get_or_set_user_pass_phrase():
+def ensure_user_pass_phrase():
     pass_phrase = get_user_pass_phrase()
     if pass_phrase:
         return pass_phrase
@@ -206,13 +217,23 @@ def get_or_set_user_pass_phrase():
 # Set up PGP keys
 # Also can be used to configure the user, name, or password
 def setup_pgp_keys():
-    print("Running setup.")
-    # Step 1: call get_user_name_and_email, which will call first_time_setup if needed.
-    _user, _email = get_user_name_and_email()
-    # Step 2: TODO
-    # A limitation is that if password was NOT saved to a file, we should really re-ask here.
-    # For now, we just re-ask twice in some cases.
-    _pass = get_or_set_user_pass_phrase()
+    print("Setting up PGP keys...")
+
+    name, email = get_user_name_and_email()
+    if not name or not email:
+        # Case 1: un the first time setup
+        name, email = first_time_setup()
+
+        print(f"Successfully registered {name} <{email}>.")
+    else:
+        # Case 2: user name and email already set
+        print(f"Found existing user: {name} <{email}>.")
+
+        print("Setting up pass phrase...")
+        _pass_phrase = ensure_user_pass_phrase()
+
+    print("Done with setup.")
+    print_pgp_public_keys(email)
 
 # Print public key(s)
 def print_pgp_public_keys(email):
@@ -228,10 +249,9 @@ def print_pgp_public_keys(email):
         print("\nPublic PGP Key (post this on your website or send it to your friend):\n")
         print(public_key)
 
-        print("Saving public key to a file for convenient sharing...")
         with open(PUB_KEY_FILE, "w") as f:
             f.write(public_key)
-        print(f"Public key saved successfully to {PUB_KEY_FILE}.")
+        print(f"Public key saved for sharing at {PUB_KEY_FILE}.")
 
     else:
         print(f"Error exporting PGP public key: {export_result.stderr.decode()}")
@@ -239,7 +259,8 @@ def print_pgp_public_keys(email):
 # Reset the GPG configuration
 def reset_all_keys():
     # Warning: this permanently deletes all keys!
-    print("Warning: this will permanently delete all GPG keys from your keyring.")
+    print("Warning: this will permanently delete all GPG keys from your keyring,")
+    print("and local configuration files.")
     print("Existing encryption keys or encrypted messages will be lost.")
     print("This operation cannot be undone.")
     confirm = input("Are you sure you want to continue? (y/n):\n")
@@ -249,7 +270,7 @@ def reset_all_keys():
         return
 
     # Get user name
-    name, _ = get_user_name_and_email()
+    name, _ = ensure_user_name_and_email()
     if not name:
         print("No user name found. Aborting operation.")
         return
@@ -275,6 +296,13 @@ def reset_all_keys():
         result_trust = subprocess.run(['gpg', '--delete-trustdb'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if result_trust.returncode != 0:
             print(f"Error clearing trust database: {result_trust.stderr.decode()}")
+
+        # Step 4: Delete the local configuration files
+        print("Deleting local configuration files associated with this script...")
+        subprocess.run(['rm', PUB_KEY_FILE])
+        print(f"Deleted {PUB_KEY_FILE}")
+        subprocess.run(['rm', PASS_PHRASE_FILE])
+        print(f"Deleted {PASS_PHRASE_FILE}")
 
         print("All GPG keys have been permanently deleted.")
 
@@ -411,7 +439,7 @@ def decrypt_message():
         return
 
     # Ensure PGP is set up by getting the user's name and email.
-    _name, _email = get_user_name_and_email()
+    _name, _email = ensure_user_name_and_email()
 
     # Get pass phrase if present (does not prompt if pass phrase is saved in a file)
     pass_phrase = get_user_pass_phrase()
