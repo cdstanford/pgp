@@ -205,6 +205,7 @@ def ensure_user_pass_phrase():
     try:
         with open("pass_phrase.txt", "w") as f:
             f.write(pass_phrase)
+            f.write('\n')
         print("Pass phrase saved successfully.")
         print("Make sure you keep this file safe!")
         print("To change the pass phrase, delete the pass_phrase.txt file.")
@@ -255,59 +256,6 @@ def print_pgp_public_keys(email):
 
     else:
         print(f"Error exporting PGP public key: {export_result.stderr.decode()}")
-
-# Reset the GPG configuration
-def reset_all_keys():
-    # Warning: this permanently deletes all keys!
-    print("Warning: this will permanently delete all GPG keys from your keyring,")
-    print("and local configuration files.")
-    print("Existing encryption keys or encrypted messages will be lost.")
-    print("This operation cannot be undone.")
-    confirm = input("Are you sure you want to continue? (y/n):\n")
-
-    if confirm.lower() != 'y':
-        print("Aborting operation.")
-        return
-
-    # Get user name
-    name, _ = ensure_user_name_and_email()
-    if not name:
-        print("No user name found. Aborting operation.")
-        return
-
-    # Command to delete all keys
-    cmd = ['gpg', '--delete-secret-and-public-keys', '--yes', name]
-
-    try:
-        # Step 1: Delete all secret (private) keys
-        print("Deleting all secret (private) keys...")
-        result_secret = subprocess.run(['gpg', '--delete-secret-keys', '--yes', '--batch'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result_secret.returncode != 0:
-            print(f"Error deleting secret keys: {result_secret.stderr.decode()}")
-
-        # Step 2: Delete all public keys
-        print("Deleting all public keys...")
-        result_public = subprocess.run(['gpg', '--delete-keys', '--yes', '--batch'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result_public.returncode != 0:
-            print(f"Error deleting public keys: {result_public.stderr.decode()}")
-
-        # Step 3: Clear the trust database
-        print("Clearing trust database...")
-        result_trust = subprocess.run(['gpg', '--delete-trustdb'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result_trust.returncode != 0:
-            print(f"Error clearing trust database: {result_trust.stderr.decode()}")
-
-        # Step 4: Delete the local configuration files
-        print("Deleting local configuration files associated with this script...")
-        subprocess.run(['rm', PUB_KEY_FILE])
-        print(f"Deleted {PUB_KEY_FILE}")
-        subprocess.run(['rm', PASS_PHRASE_FILE])
-        print(f"Deleted {PASS_PHRASE_FILE}")
-
-        print("All GPG keys have been permanently deleted.")
-
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
 
 ##########################
 ###     Encryption     ###
@@ -369,11 +317,10 @@ def select_recipient():
         return select_recipient()
 
     # Display the recipient list
-    print("Select a recipient, or 'r' to register a new recipient:")
     for i, recipient in enumerate(recipients, start=1):
         print(f"{i}: {recipient}")
 
-    raw_selection = input("Enter the recipient number:\n").strip().lower()
+    raw_selection = input("Select a recipient number (or 'r' to register a new recipient):\n").strip().lower()
 
     if raw_selection == 'r':
         register_recipient()
@@ -488,10 +435,8 @@ if __name__ == '__main__':
         encrypt_message()
     elif mode == 'd':
         decrypt_message()
-    elif mode == 'r':
-        reset_all_keys()
     elif mode == 'q':
         print("Quitting")
     else:
-        print("Invalid mode. Please choose one of 's', 'v', 'e', or 'd'.")
+        print("Invalid mode. Please choose one of 's', 'e', 'd', or 'q'.")
         exit(1)
