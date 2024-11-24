@@ -1,2 +1,2 @@
 # pgp
-quick PGP script
+A quick and complete broken PGP script
