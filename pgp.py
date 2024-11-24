@@ -426,7 +426,7 @@ if __name__ == '__main__':
     print("(No encryption necessary for bug reports :) )")
     print()
 
-    mode_raw = input("Choose s=setup, e=encrypt, d=decrypt, r=reset, or q=quit:\n").strip().lower()
+    mode_raw = input("Choose s=setup, e=encrypt, d=decrypt, or q=quit:\n").strip().lower()
     mode = mode_raw[0] if mode_raw else ""
 
     if mode == 's':
